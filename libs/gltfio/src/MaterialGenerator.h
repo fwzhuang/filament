@@ -51,6 +51,7 @@ struct MaterialKey {
     uint8_t aoUV;
     uint8_t normalUV;
     float alphaMaskThreshold;
+    bool hasTextureTransforms;
 };
 
 // Define a mapping from a uv set index in the source asset to one of Filament's uv sets.

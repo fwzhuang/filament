@@ -92,7 +92,11 @@ static std::string shaderFromKey(const MaterialKey& config, const UvMap& uvmap) 
     // TODO: apply materialParams_normalScale and materialParams_aoStrength
 
     if (config.hasNormalTexture && !config.unlit) {
-        shader += "float2 normalUV = uv" + normalUV + "();\n";
+        if (config.hasTextureTransforms) {
+            shader += "float2 normalUV = uv" + normalUV + "();\n"; // TODO
+        } else {
+            shader += "float2 normalUV = uv" + normalUV + "();\n";
+        }
         shader += R"SHADER(
             material.normal = texture(materialParams_normalMap, normalUV).xyz * 2.0 - 1.0;
             material.normal.y = -material.normal.y;
@@ -105,7 +109,11 @@ static std::string shaderFromKey(const MaterialKey& config, const UvMap& uvmap) 
     )SHADER";
 
     if (config.hasBaseColorTexture) {
-        shader += "float2 baseColorUV = uv" + baseColorUV + "();\n";
+        if (config.hasTextureTransforms) {
+            shader += "float2 baseColorUV = uv" + baseColorUV + "();\n"; // TODO
+        } else {
+            shader += "float2 baseColorUV = uv" + baseColorUV + "();\n";
+        }
         shader += R"SHADER(
             material.baseColor *= texture(materialParams_baseColorMap, baseColorUV);
         )SHADER";
@@ -128,7 +136,11 @@ static std::string shaderFromKey(const MaterialKey& config, const UvMap& uvmap) 
             material.emissive.rgb = materialParams.emissiveFactor.rgb;
         )SHADER";
         if (config.hasMetallicRoughnessTexture) {
-            shader += "float2 metallicRoughnessUV = uv" + metallicRoughnessUV + "();\n";
+            if (config.hasTextureTransforms) {
+                shader += "float2 metallicRoughnessUV = uv" + metallicRoughnessUV + "();\n"; // TODO
+            } else {
+                shader += "float2 metallicRoughnessUV = uv" + metallicRoughnessUV + "();\n";
+            }
             shader += R"SHADER(
                 vec4 roughness = texture(materialParams_metallicRoughnessMap, metallicRoughnessUV);
                 material.roughness *= roughness.g;
@@ -136,13 +148,21 @@ static std::string shaderFromKey(const MaterialKey& config, const UvMap& uvmap) 
             )SHADER";
         }
         if (config.hasOcclusionTexture) {
-            shader += "float2 aoUV = uv" + aoUV + "();\n";
+            if (config.hasTextureTransforms) {
+                shader += "float2 aoUV = uv" + aoUV + "();\n"; // TODO
+            } else {
+                shader += "float2 aoUV = uv" + aoUV + "();\n";
+            }
             shader += R"SHADER(
                 material.ambientOcclusion = texture(materialParams_occlusionMap, aoUV).r;
             )SHADER";
         }
         if (config.hasEmissiveTexture) {
-            shader += "float2 emissiveUV = uv" + emissiveUV + "();\n";
+            if (config.hasTextureTransforms) {
+                shader += "float2 emissiveUV = uv" + emissiveUV + "();\n"; // TODO
+            } else {
+                shader += "float2 emissiveUV = uv" + emissiveUV + "();\n";
+            }
             shader += R"SHADER(
                 material.emissive.rgb *= texture(materialParams_emissiveMap, emissiveUV).rgb;
                 material.emissive.a = 3.0;
@@ -217,6 +237,9 @@ static Material* createMaterial(Engine* engine, const MaterialKey& config, const
     builder.parameter(MaterialBuilder::UniformType::FLOAT4, "baseColorFactor");
     if (config.hasBaseColorTexture) {
         builder.parameter(MaterialBuilder::SamplerType::SAMPLER_2D, "baseColorMap");
+        if (config.hasTextureTransforms) {
+            builder.parameter(MaterialBuilder::UniformType::MAT3, "baseColorUvMatrix");
+        }
     }
     if (config.hasVertexColors) {
         builder.require(VertexAttribute::COLOR);
@@ -227,6 +250,9 @@ static Material* createMaterial(Engine* engine, const MaterialKey& config, const
     builder.parameter(MaterialBuilder::UniformType::FLOAT, "roughnessFactor");
     if (config.hasMetallicRoughnessTexture) {
         builder.parameter(MaterialBuilder::SamplerType::SAMPLER_2D, "metallicRoughnessMap");
+        if (config.hasTextureTransforms) {
+            builder.parameter(MaterialBuilder::UniformType::MAT3, "metallicRoughnessUvMatrix");
+        }
     }
 
     // NORMAL MAP
@@ -234,6 +260,9 @@ static Material* createMaterial(Engine* engine, const MaterialKey& config, const
     builder.parameter(MaterialBuilder::UniformType::FLOAT, "normalScale");
     if (config.hasNormalTexture) {
         builder.parameter(MaterialBuilder::SamplerType::SAMPLER_2D, "normalMap");
+        if (config.hasTextureTransforms) {
+            builder.parameter(MaterialBuilder::UniformType::MAT3, "normalUvMatrix");
+        }
     }
 
     // AMBIENT OCCLUSION
@@ -241,12 +270,18 @@ static Material* createMaterial(Engine* engine, const MaterialKey& config, const
     builder.parameter(MaterialBuilder::UniformType::FLOAT, "aoStrength");
     if (config.hasOcclusionTexture) {
         builder.parameter(MaterialBuilder::SamplerType::SAMPLER_2D, "occlusionMap");
+        if (config.hasTextureTransforms) {
+            builder.parameter(MaterialBuilder::UniformType::MAT3, "occlusionUvMatrix");
+        }
     }
 
     // EMISSIVE
     builder.parameter(MaterialBuilder::UniformType::FLOAT3, "emissiveFactor");
     if (config.hasEmissiveTexture) {
         builder.parameter(MaterialBuilder::SamplerType::SAMPLER_2D, "emissiveMap");
+        if (config.hasTextureTransforms) {
+            builder.parameter(MaterialBuilder::UniformType::MAT3, "emissiveUvMatrix");
+        }
     }
 
     switch(config.alphaMode) {

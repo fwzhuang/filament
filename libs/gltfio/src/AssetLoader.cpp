@@ -505,25 +505,34 @@ MaterialInstance* FAssetLoader::createMaterialInstance(const cgltf_material* inp
         return mMatInstanceCache[0] = mi;
     }
 
-    bool has_pbr = inputMat->has_pbr_metallic_roughness;
-    auto pbr_config = inputMat->pbr_metallic_roughness;
+    if (inputMat->has_pbr_specular_glossiness) {
+        slog.e << "KHR_materials_pbrSpecularGlossiness is not supported." << io::endl;
+    }
+
+    auto pbrConfig = inputMat->pbr_metallic_roughness;
+    bool hasTextureTransforms = pbrConfig.base_color_texture.has_transform ||
+        pbrConfig.metallic_roughness_texture.has_transform ||
+        inputMat->normal_texture.has_transform ||
+        inputMat->occlusion_texture.has_transform ||
+        inputMat->emissive_texture.has_transform;
 
     MaterialKey matkey {
         .doubleSided = (bool) inputMat->double_sided,
         .unlit = (bool) inputMat->unlit,
         .hasVertexColors = vertexColor,
-        .hasBaseColorTexture = has_pbr && pbr_config.base_color_texture.texture,
-        .hasMetallicRoughnessTexture = has_pbr && pbr_config.metallic_roughness_texture.texture,
+        .hasBaseColorTexture = pbrConfig.base_color_texture.texture,
+        .hasMetallicRoughnessTexture = pbrConfig.metallic_roughness_texture.texture,
         .hasNormalTexture = inputMat->normal_texture.texture,
         .hasOcclusionTexture = inputMat->occlusion_texture.texture,
         .hasEmissiveTexture = inputMat->emissive_texture.texture,
         .alphaMode = AlphaMode::OPAQUE,
         .alphaMaskThreshold = 0.5f,
-        .baseColorUV = (uint8_t) pbr_config.base_color_texture.texcoord,
-        .metallicRoughnessUV = (uint8_t) pbr_config.metallic_roughness_texture.texcoord,
+        .baseColorUV = (uint8_t) pbrConfig.base_color_texture.texcoord,
+        .metallicRoughnessUV = (uint8_t) pbrConfig.metallic_roughness_texture.texcoord,
         .emissiveUV = (uint8_t) inputMat->emissive_texture.texcoord,
         .aoUV = (uint8_t) inputMat->occlusion_texture.texcoord,
         .normalUV = (uint8_t) inputMat->normal_texture.texcoord,
+        .hasTextureTransforms = hasTextureTransforms
     };
 
     switch (inputMat->alpha_mode) {
@@ -539,10 +548,6 @@ MaterialInstance* FAssetLoader::createMaterialInstance(const cgltf_material* inp
             break;
     }
 
-    if (inputMat->has_pbr_specular_glossiness) {
-        slog.w << "pbrSpecularGlossiness textures are not supported." << io::endl;
-    }
-
     // This not only creates (or fetches) a material, it modifies the material key according to
     // our rendering constraints. For example, Filament only supports 2 sets of texture coordinates.
     Material* mat = mMaterials.getOrCreateMaterial(&matkey, uvmap);
@@ -556,32 +561,48 @@ MaterialInstance* FAssetLoader::createMaterialInstance(const cgltf_material* inp
     mi->setParameter("normalScale", inputMat->normal_texture.scale);
     mi->setParameter("aoStrength", inputMat->occlusion_texture.scale);
 
-    if (has_pbr) {
-        const float* c = &pbr_config.base_color_factor[0];
-        mi->setParameter("baseColorFactor", float4(c[0], c[1], c[2], c[3]));
-        mi->setParameter("metallicFactor", pbr_config.metallic_factor);
-        mi->setParameter("roughnessFactor", pbr_config.roughness_factor);
-    }
+    const float* c = &pbrConfig.base_color_factor[0];
+    mi->setParameter("baseColorFactor", float4(c[0], c[1], c[2], c[3]));
+    mi->setParameter("metallicFactor", pbrConfig.metallic_factor);
+    mi->setParameter("roughnessFactor", pbrConfig.roughness_factor);
 
     if (matkey.hasBaseColorTexture) {
-        addTextureBinding(mi, "baseColorMap", pbr_config.base_color_texture.texture, true);
+        addTextureBinding(mi, "baseColorMap", pbrConfig.base_color_texture.texture, true);
+        if (matkey.hasTextureTransforms) {
+            const cgltf_texture_transform& uvt = pbrConfig.base_color_texture.transform;
+            // float offset[2], cgltf_float rotation, float scale[2];
+            // auto uvmat = matrixFromUvTransform(uvt.offset, uvt.rotation, uvt.scale);
+            mi->setParameter("baseColorUvMatrix", mat3f());
+        }
     }
 
     if (matkey.hasMetallicRoughnessTexture) {
         addTextureBinding(mi, "metallicRoughnessMap",
-                pbr_config.metallic_roughness_texture.texture, false);
+                pbrConfig.metallic_roughness_texture.texture, false);
+        if (matkey.hasTextureTransforms) {
+            mi->setParameter("metallicRoughnessUvMatrix", mat3f());
+        }
     }
 
     if (matkey.hasNormalTexture) {
         addTextureBinding(mi, "normalMap", inputMat->normal_texture.texture, false);
+        if (matkey.hasTextureTransforms) {
+            mi->setParameter("normalUvMatrix", mat3f());
+        }
     }
 
     if (matkey.hasOcclusionTexture) {
         addTextureBinding(mi, "occlusionMap", inputMat->occlusion_texture.texture, false);
+        if (matkey.hasTextureTransforms) {
+            mi->setParameter("occlusionUvMatrix", mat3f());
+        }
     }
 
     if (matkey.hasEmissiveTexture) {
         addTextureBinding(mi, "emissiveMap", inputMat->emissive_texture.texture, true);
+        if (matkey.hasTextureTransforms) {
+            mi->setParameter("emissiveUvMatrix", mat3f());
+        }
     }
 
     return mMatInstanceCache[key] = mi;
